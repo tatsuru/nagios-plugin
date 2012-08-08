@@ -25,7 +25,7 @@ sub fetch_memory_usage_ratio {
         -varbindlist    => [values %oids]
     )};
 
-    my $used   = $results{$oids{total}} - $results{$oids{avail}};
+    my $used   = $results{$oids{total}} - $results{$oids{free}};
     my $buffer = $results{$oids{buffer}};
     my $cached = $results{$oids{cached}};
     my $total  = $results{$oids{total}};
