@@ -1,0 +1,84 @@
+#!/usr/bin/env perl
+# memory usage checker
+
+use Getopt::Long;
+use Net::SNMP;
+use Nagios::Plugin;
+
+sub fetch_memory_usage_ratio {
+    my $host = shift;
+    my $timeout = shift;
+
+    my %oids = (
+        total   => '.1.3.6.1.4.1.2021.4.5.0',
+        free    => '.1.3.6.1.4.1.2021.4.6.0',
+        buffer  => '.1.3.6.1.4.1.2021.4.14.0',
+        cached  => '.1.3.6.1.4.1.2021.4.15.0',
+    );
+    my ($session, $error) = Net::SNMP->session(
+        -version   => 'v2c',
+        -community => 'public',
+        -hostname  => $host,
+        -timeout   => $timeout,
+    );
+    my %results = %{$session->get_request(
+        -varbindlist    => [values %oids]
+    )};
+
+    my $used   = $results{$oids{total}} - $results{$oids{avail}};
+    my $buffer = $results{$oids{buffer}};
+    my $cached = $results{$oids{cached}};
+    my $total  = $results{$oids{total}};
+    my $ratio  = ($used - $buffer - $cached) / ($total * 1.0) * 100;
+
+    return $ratio;
+}
+
+my $nagios = Nagios::Plugin->new(
+    shortname   => 'MEMORY USAGE CHECKER',
+    version     => 0.1,
+    usage       =>
+        "Usage: %s "                    .
+        "-H --hostname  <hostname> "    .
+        "-w --warning   <threshold> "   .
+        "-c --critical  <threshold> "   .
+        "-t --timeout   <timeout> "
+);
+
+$nagios->add_arg(
+    spec => 'hostname|H=s',
+    help => '-H, --hostname hostname',
+    required => 1,
+);
+$nagios->add_arg(
+    spec => 'warning|w=i',
+    help => '-w, --warning INTEGER (%)',
+    required => 1,
+);
+$nagios->add_arg(
+    spec => 'critical|c=i',
+    help => '-c, --critical INTEGER (%)',
+    required => 1,
+);
+$nagios->add_arg(
+    spec => 'timeout|t=i',
+    help => '-t, --timeout INTEGER (sec)',
+    default => 10,
+    required => 0,
+);
+$nagios->getopts;
+
+my $host               = $nagios->opts->get('hostname');
+my $timeout            = $nagios->opts->get('timeout');
+my $warning_threshold  = $nagios->opts->get('warning');
+my $critical_threshold = $nagios->opts->get('critical');
+
+my $ratio = fetch_memory_usage_ratio($host, $timeout);
+
+if ($ratio < $warning_threshold) {
+    $nagios->nagios_exit(OK, sprintf("%3.1f%%", $ratio));
+} elsif ($ration < $critical_threshold) {
+    $nagios->nagios_exit(WARNING, sprintf("%3.1f%%", $ratio));
+} else {
+    $nagios->nagios_exit(CRITICAL, sprintf("%3.1f%%", $ratio));
+}
