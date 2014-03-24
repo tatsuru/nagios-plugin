@@ -119,6 +119,9 @@ sub get_container_external_ports {
     my $container_port = $args->{container_port};
     my $ports = $container->{Ports};
     my $ex_ports = [
+        map {
+            $_->{PublicPort}
+        }
         grep {
             $_->{PrivatePort} == $container_port
         } @$ports
